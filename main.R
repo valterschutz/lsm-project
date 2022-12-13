@@ -1,18 +1,24 @@
-library(tidyverse)
 library(chron)
 library(car)
 library(MASS)
 library(akima)
 library(stats)
 library(nlstools)
-
+library(tidyverse)
+library(GGally)
 rm(list = ls())
-df = tibble(read.csv("C:\\Users\\elias\\IPS\\lsm-project\\kc_house_data.csv"))
-df = df[,-c(1)]
+
+# Modify data?
+df = tibble(read.csv("kc_house_data.csv"))
 df$date = as.POSIXct(df$date, format="%Y%m%d")
 df$zipcode = factor(df$zipcode)
 df$gradeCategory = factor(df$grade)
+dfcont <- dplyr::select(df, price, sqft_living, sqft_above, sqft_basement, lat, long)
+dfconttest <- sample_n(dfcont, 1000)
 #df$yr_renovated_or_built = pmax(df$yr_renovated, df$yr_built)
+
+# Pairs plot
+ggpairs(dfconttest, mapping = aes(alpha = 0.01))
 
 #df_test = sample_n(df, 10000)
 #pairs(df_test[,c("price","sqft_above","sqft_basement", "bathrooms","bedrooms","yr_built","view","condition","grade","waterfront")])
