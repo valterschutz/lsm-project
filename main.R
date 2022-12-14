@@ -4,26 +4,76 @@ library(MASS)
 library(akima)
 library(stats)
 library(nlstools)
+library(leaps)
 library(tidyverse)
 library(GGally)
+library(caret)
+library(olsrr)
 rm(list = ls())
 
 # Modify data?
 df = tibble(read.csv("kc_house_data.csv"))
 df$date = as.POSIXct(df$date, format="%Y%m%d")
 df$zipcode = factor(df$zipcode)
-df$gradeCategory = factor(df$grade)
-dfcont <- dplyr::select(df, price, sqft_living, sqft_above, sqft_basement, lat, long)
-dfconttest <- sample_n(dfcont, 1000)
-#df$yr_renovated_or_built = pmax(df$yr_renovated, df$yr_built)
+df$sqft_price <- df$price / df$sqft_living
+df_red = select(df, -c(id,date,long,lat,sqft_living))
+#dfcont <- dplyr::select(df, price, sqft_above, sqft_basement, lat, long)
+#dfconttest <- sample_n(dfcont, 100)
 
 # Pairs plot
 ggpairs(dfconttest, mapping = aes(alpha = 0.01))
 
+# Boxplots of categorical variables
+
+# Not significant
+ggplot(df) +
+  geom_boxplot(aes(x = factor(bedrooms), y = price))
+ggplot(df) +
+  geom_boxplot(aes(x = factor(floors), y = price))
+ggplot(df) +
+  geom_boxplot(aes(x = factor(condition), y = price))
+# Significant
+ggplot(df) +
+  geom_boxplot(aes(x = factor(grade), y = price))
+ggplot(df) +
+  geom_boxplot(aes(x = factor(bathrooms), y = price))
+
+# Big model to see what is significant
+m_big <- lm(price ~ ., data=df_red)
+
+# Backward search
+#df_search <- sample_n(df, 100)
+#df_search <- df_red
+#df_search = select(df_search, !c(id,date,sqft_living,long,lat))
+m_backward = lm(price ~ ., data=df_red)
+bc <- boxcox(m_backward)  # log is reasonable
+m_backward = lm(log(price) ~ ., data=df_red)
+stepAIC(m_backward, direction="both")
+# From this we get two models, one simple and one more complex
+m1 <- lm(log(price) ~ sqft_living15 + condition + waterfront + view + sqft_basement + grade + sqft_above + zipcode, data=df_red)
+m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode - 1, data=df_red)
+zipcode_score <- as.numeric(m2$coefficients[4:length(m2$coefficients)])
+df_red$zipcode_score <- zipcode_score
+# Try to create a very small model
+
+# Exhaustive model search
+df_search <- sample_n(df, 1000)
+df_search = select(df_search, !c(id,date,sqft_living,long,lat,bedrooms,bathrooms,floors,waterfront,condition,grade))
+model <- lm(price ~ . - 1, data = df_search)
+k <- ols_step_all_possible(model)
+plot(k)
+#
+#response = df_exhaustive$price
+#traincontrol = trainControl(method = "cv", number = 10)
+#model = train(x = predictors, y = response, method = "lm", trControl = traincontrol)
+#ggplot(model$results, aes(x = Complexity, y = PMSE)) +
+#  geom_line() +
+#  labs(title = "PMSE vs. Number of Included Covariates",
+#       x = "Number of Included Covariates",
+#       y = "PMSE")
+
 #df_test = sample_n(df, 10000)
 #pairs(df_test[,c("price","sqft_above","sqft_basement", "bathrooms","bedrooms","yr_built","view","condition","grade","waterfront")])
-m1 = lm(log(price) ~ bedrooms + bathrooms + zipcode + sqft_above + sqft_lot + sqft_basement + floors + waterfront + view + condition + gradeCategory + yr_built + sqft_lot15 + sqft_living15 + long + lat, data=df)
-#stepAIC(m1, direction="both")
 #Remove the least significant covariates
 m2 = lm(log(price) ~ zipcode + sqft_above + sqft_basement + gradeCategory, data=df)
 
