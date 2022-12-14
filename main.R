@@ -53,7 +53,13 @@ stepAIC(m_backward, direction="both")
 m1 <- lm(log(price) ~ sqft_living15 + condition + waterfront + view + sqft_basement + grade + sqft_above + zipcode, data=df_red)
 m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode - 1, data=df_red)
 zipcode_score <- as.numeric(m2$coefficients[4:length(m2$coefficients)])
-df_red$zipcode_score <- zipcode_score
+a <- data.frame(zipcode_score)
+zipcode_strings = row.names(a)
+a$zipcode <- factor(substr(zipcode_strings, 8, 12))
+rownames(a) <- NULL
+a
+df #Hur får vi in zipcode_values i df?
+which(df$zipcode == a$zipcode[20])
 # Try to create a very small model
 
 # Exhaustive model search
