@@ -10,97 +10,83 @@ library(GGally)
 library(caret)
 library(olsrr)
 library(plyr)
+library(gridExtra)
 rm(list = ls())
 
 # Modify data?
 df = tibble(read.csv("kc_house_data.csv"))
 df$date = as.POSIXct(df$date, format="%Y%m%d")
 df$zipcode = factor(df$zipcode)
-df$sqft_price <- df$price / df$sqft_living
-#df_red = select(df, -c(id,date,long,lat,sqft_living))
-df_red = df
-#dfcont <- dplyr::select(df, price, sqft_above, sqft_basement, lat, long)
-#dfconttest <- sample_n(dfcont, 100)
+df_red = select(df, -c(id,date,long,lat,sqft_living))
+df_red_cont = select(df_red, -c(bedrooms,bathrooms,floors,waterfront,view,condition,grade,yr_built,yr_renovated,zipcode))
+df_red_cont_sample <- sample_n(df_red_cont, 500)
 
 # Pairs plot
-#ggpairs(dfconttest, mapping = aes(alpha = 0.01))
+ggpairs(df_red_cont_sample, mapping = aes(alpha = 0.001)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
 
 # Boxplots of categorical variables
 
 # Not significant
-ggplot(df) +
-  geom_boxplot(aes(x = factor(bedrooms), y = price))
-ggplot(df) +
-  geom_boxplot(aes(x = factor(floors), y = price))
-ggplot(df) +
-  geom_boxplot(aes(x = factor(condition), y = price))
+p1 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(bedrooms), y = price)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+p2 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(floors), y = price)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+p3 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(condition), y = price)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
 # Significant
-ggplot(df) +
-  geom_boxplot(aes(x = factor(grade), y = price))
-ggplot(df) +
-  geom_boxplot(aes(x = factor(bathrooms), y = price))
+p4 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(grade), y = price)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+p5 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(bathrooms), y = price)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+fig.combined1 <- grid.arrange(p1,p2,p3,p4,p5, ncol = 2)
 
-# Big model to see what is significant
-#m_big <- lm(price ~ ., data=df_red)
+# Same thing but log(price)
+# Not significant
+p1 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(bedrooms), y = log(price))) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+p2 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(floors), y = log(price))) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+p3 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(condition), y = log(price))) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+# Significant
+p4 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(grade), y = log(price))) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+p5 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(bathrooms), y = log(price))) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+fig.combined1 <- grid.arrange(p1,p2,p3,p4,p5, ncol = 2)
 
 # Backward search
-#df_search <- sample_n(df, 100)
-#df_search <- df_red
-#df_search = select(df_search, !c(id,date,sqft_living,long,lat))
-m_backward = lm(price ~ ., data=df_red)
-bc <- boxcox(m_backward)  # log is reasonable
-m_backward = lm(log(price) ~ ., data=df_red)
-stepAIC(m_backward, direction="both")
-# From this we get two models, one simple and one more complex
-m1 <- lm(log(price) ~ sqft_living15 + condition + waterfront + view + sqft_basement + grade + sqft_above + zipcode, data=df_red)
+m0 = lm(price ~ ., data=df_red)
+bc <- boxcox(m0)  # log is reasonable
+m1 <- lm(log(price) ~ ., data=df_red)
+stepAIC(m1, direction="both")
+# Most important variables
 m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red)
+# Even simpler model
 m3 <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red)
-# Try to create a very small model
-zipcode_score <- m2$coefficients[4:length(m2$coefficients)]
 
-a <- data.frame(zipcode_score)
-zipcode_strings = row.names(a)
-a$zipcode <- substr(zipcode_strings, 8, 12)
-rownames(a) <- NULL
-factor(a$zipcode)
-df$zipcode_score = 1.0
-a
-•for(i in a$zipcode){
-  score = as.numeric(a[a$zipcode==i, ]["zipcode_score"])
-  ids = which(df$zipcode == toString(i))
-  df$zipcode_score[ids] = score
-}
-m4 <- lm(log(price) ~ zipcode_score+sqft_above+grade+view+sqft_basement, data=df)
-summary(m4)
-plot(m4)
-stepAIC(m4, direction="backward")
-stepAIC(m1, direction="backward")
-# Exhaustive model search
-df_search <- sample_n(df, 1000)
-df_search = select(df_search, !c(id,date,sqft_living,long,lat,bedrooms,bathrooms,floors,waterfront,condition,grade))
-model <- lm(price ~ . - 1, data = df_search)
-k <- ols_step_all_possible(model)
-plot(k)
-#
-#response = df_exhaustive$price
-#traincontrol = trainControl(method = "cv", number = 10)
-#model = train(x = predictors, y = response, method = "lm", trControl = traincontrol)
-#ggplot(model$results, aes(x = Complexity, y = PMSE)) +
-#  geom_line() +
-#  labs(title = "PMSE vs. Number of Included Covariates",
-#       x = "Number of Included Covariates",
-#       y = "PMSE")
-
-#df_test = sample_n(df, 10000)
-#pairs(df_test[,c("price","sqft_above","sqft_basement", "bathrooms","bedrooms","yr_built","view","condition","grade","waterfront")])
-#Remove the least significant covariates
-m2 = lm(log(price) ~ zipcode + sqft_above + sqft_basement + gradeCategory, data=df)
-
-df$price_per_sqft <- df$price/df$sqft_living
-
-#df$distance_from_most_expensive <- log((df$long+122)^2+(df$lat-47.5)^2)
-m3 = lm(log(price) ~ zipcode + sqft_above + I(sqft_above^2) + sqft_basement + grade + I(grade^2), data=df)
-summary(m3)
 
 vif(m1)
 vif(m2)
