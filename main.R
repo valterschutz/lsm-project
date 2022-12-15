@@ -9,6 +9,7 @@ library(tidyverse)
 library(GGally)
 library(caret)
 library(olsrr)
+library(plyr)
 rm(list = ls())
 
 # Modify data?
@@ -16,12 +17,13 @@ df = tibble(read.csv("kc_house_data.csv"))
 df$date = as.POSIXct(df$date, format="%Y%m%d")
 df$zipcode = factor(df$zipcode)
 df$sqft_price <- df$price / df$sqft_living
-df_red = select(df, -c(id,date,long,lat,sqft_living))
+#df_red = select(df, -c(id,date,long,lat,sqft_living))
+df_red = df
 #dfcont <- dplyr::select(df, price, sqft_above, sqft_basement, lat, long)
 #dfconttest <- sample_n(dfcont, 100)
 
 # Pairs plot
-ggpairs(dfconttest, mapping = aes(alpha = 0.01))
+#ggpairs(dfconttest, mapping = aes(alpha = 0.01))
 
 # Boxplots of categorical variables
 
@@ -39,7 +41,7 @@ ggplot(df) +
   geom_boxplot(aes(x = factor(bathrooms), y = price))
 
 # Big model to see what is significant
-m_big <- lm(price ~ ., data=df_red)
+#m_big <- lm(price ~ ., data=df_red)
 
 # Backward search
 #df_search <- sample_n(df, 100)
@@ -51,17 +53,28 @@ m_backward = lm(log(price) ~ ., data=df_red)
 stepAIC(m_backward, direction="both")
 # From this we get two models, one simple and one more complex
 m1 <- lm(log(price) ~ sqft_living15 + condition + waterfront + view + sqft_basement + grade + sqft_above + zipcode, data=df_red)
-m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode - 1, data=df_red)
-zipcode_score <- as.numeric(m2$coefficients[4:length(m2$coefficients)])
+m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red)
+m3 <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red)
+# Try to create a very small model
+zipcode_score <- m2$coefficients[4:length(m2$coefficients)]
+
 a <- data.frame(zipcode_score)
 zipcode_strings = row.names(a)
-a$zipcode <- factor(substr(zipcode_strings, 8, 12))
+a$zipcode <- substr(zipcode_strings, 8, 12)
 rownames(a) <- NULL
+factor(a$zipcode)
+df$zipcode_score = 1.0
 a
-df #Hur får vi in zipcode_values i df?
-which(df$zipcode == a$zipcode[20])
-# Try to create a very small model
-
+•for(i in a$zipcode){
+  score = as.numeric(a[a$zipcode==i, ]["zipcode_score"])
+  ids = which(df$zipcode == toString(i))
+  df$zipcode_score[ids] = score
+}
+m4 <- lm(log(price) ~ zipcode_score+sqft_above+grade+view+sqft_basement, data=df)
+summary(m4)
+plot(m4)
+stepAIC(m4, direction="backward")
+stepAIC(m1, direction="backward")
 # Exhaustive model search
 df_search <- sample_n(df, 1000)
 df_search = select(df_search, !c(id,date,sqft_living,long,lat,bedrooms,bathrooms,floors,waterfront,condition,grade))
@@ -102,3 +115,4 @@ ggplot(df) +
 #df[1720, ]
 #df[6244, ]
 #df[13630, ]
+
