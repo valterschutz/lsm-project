@@ -21,27 +21,14 @@ df_red = select(df, -c(id,date,long,lat,sqft_living))
 df_red_cont = select(df_red, -c(bedrooms,bathrooms,floors,waterfront,view,condition,grade,yr_built,yr_renovated,zipcode))
 df_red_cont_sample <- sample_n(df_red_cont, 500)
 
-# Visualizing distributions of price for different categorical variables
-# Only grade is noticeable
-ggplot(df_red, aes(x = price, color = factor(bedrooms))) +
-  geom_freqpoly(binwidth=1e5)
-ggplot(df_red, aes(x = price, color = factor(bathrooms))) +
-  geom_freqpoly(binwidth=1e5)
-ggplot(df_red, aes(x = price, color = factor(floors))) +
-  geom_freqpoly(binwidth=1e5)
-ggplot(df_red, aes(x = price, color = factor(waterfront))) +
-  geom_freqpoly(binwidth=1e5)
-ggplot(df_red, aes(x = price, color = factor(view))) +
-  geom_freqpoly(binwidth=1e5)
-ggplot(df_red, aes(x = price, color = factor(condition))) +
-  geom_freqpoly(binwidth=1e5)
-ggplot(df_red, aes(x = price, color = factor(grade))) +
-  geom_freqpoly(binwidth=1e5)
-
 # Pairs plot
 ggpairs(df_red_cont_sample, mapping = aes(alpha = 0.001)) +
   theme_minimal() +
   theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+
+# price vs sqft_above
+ggplot(df_red) +
+  geom_bin2d(aes(x = sqft_above, y = price), bins=50)
 
 # Boxplots of categorical variables
 
