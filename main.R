@@ -91,6 +91,9 @@ m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=
 # Even simpler model
 m3 <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red)
 
+# Check distribution of residuals
+ggplot() +
+  geom_freqpoly(aes(x = m1$residuals))
 
 vif(m1)
 vif(m2)
