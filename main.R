@@ -71,7 +71,11 @@ p5 <- ggplot(df) +
   geom_boxplot(aes(x = factor(bathrooms), y = price)) +
   theme_minimal() +
   theme(axis.text.x=element_blank(), axis.text.y=element_blank())
-fig.combined1 <- grid.arrange(p1,p2,p3,p4,p5, ncol = 2)
+p6 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(view), y = price)) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+fig.combined1 <- grid.arrange(p1,p2,p3,p4,p5,p6, ncol = 2)
 
 # Same thing but log(price)
 # Not significant
@@ -96,32 +100,36 @@ p5 <- ggplot(df) +
   geom_boxplot(aes(x = factor(bathrooms), y = log(price))) +
   theme_minimal() +
   theme(axis.text.x=element_blank(), axis.text.y=element_blank())
-fig.combined1 <- grid.arrange(p1,p2,p3,p4,p5, ncol = 2)
+p6 <- ggplot(df) +
+  geom_boxplot(aes(x = factor(view), y = log(price))) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), axis.text.y=element_blank())
+fig.combined1 <- grid.arrange(p1,p2,p3,p4,p5,p6, ncol = 2)
 
 # Backward search
-m0 = lm(price ~ ., data=df_red)
+m0 = lm(price ~ . -1, data=df_red)
 bc <- boxcox(m0)  # log is reasonable
-m1 <- lm(log(price) ~ ., data=df_red)
+m1 <- lm(log(price) ~ . -1, data=df_red)
 stepAIC(m1, direction="both")
 # Most important variables
-m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red)
+m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view - 1, data=df_red)
 # Even simpler model
-m3 <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red)
+m3 <- lm(log(price) ~ sqft_basement + grade + sqft_above:zipcode + zipcode + view - 1 , data=df_red)
 
 
 # Training/testing
 df_red$id <- 1:nrow(df_red)
 df_red_train <- df_red %>% dplyr::sample_frac(0.5)
 df_red_test  <- dplyr::anti_join(df_red, df_red_train, by = 'id')
-m0_train = lm(price ~ ., data=df_red_train)
-m1_train <- lm(log(price) ~ ., data=df_red_train)
-m2_train <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red_train)
-m3_train <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red_train)
+m0_train = lm(price ~ . -1, data=df_red_train)
+m1_train <- lm(log(price) ~ . -1, data=df_red_train)
+m2_train <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view - 1, data=df_red_train)
+m3_train <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view - 1, data=df_red_train)
 
-m0_test = lm(price ~ ., data=df_red_test, x=TRUE)
-m1_test <- lm(log(price) ~ ., data=df_red_test, x=TRUE)
-m2_test <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red_test, x=TRUE)
-m3_test <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red_test, x=TRUE)
+m0_test = lm(price ~ . -1, data=df_red_test, x=TRUE)
+m1_test <- lm(log(price) ~ . -1, data=df_red_test, x=TRUE)
+m2_test <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view - 1, data=df_red_test, x=TRUE)
+m3_test <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view - 1, data=df_red_test, x=TRUE)
 
 # Model evaluation, R2
 pmse(m0_train, m0_test, df_red_test$price)
@@ -141,22 +149,17 @@ sum(log(df_red_test$price) < m1_predict$upr & df_red_test$price > m1_predict$lwr
 sum(log(df_red_test$price) < m2_predict$upr & df_red_test$price > m2_predict$lwr) / dim(df_red_test)[1]
 sum(log(df_red_test$price) < m3_predict$upr & df_red_test$price > m3_predict$lwr) / dim(df_red_test)[1]
   
-ggplot(predict(m0_test, interval = "predict")) +
-  geom_line(aes(y = fit))
-
-ggplot(m1_predict) +
-  geom_point(aes(y = width, x = log(df_red_test$price)))
-
 # Check distribution of residuals
-ggplot() +
-  geom_freqpoly(aes(x = m2$residuals))
-p1 <- ggplot() +
-  geom_qq(aes(sample = m0_test$residuals), alpha=0.2)
+p1 <- df_red_test %>%
+  gather_residuals(m0_train) %>%
+  ggplot() +
+  geom_qq(aes(sample = resid), alpha=0.2)
 thing <- df_red_test %>%
-  gather_residuals(m1_test,m2_test,m3_test)
+  gather_residuals(m1_train,m2_train,m3_train)
 p2 <- ggplot(thing) +
   geom_qq(aes(sample = resid, color = model), alpha = 0.2)
 fig.combined <- grid.arrange(p1,p2, ncol = 2, widths = c(1,1.25))
+
 # Residuals for different categorical variables
 ggplot(thing) +
   geom_boxplot(aes(x = factor(grade), y = resid, color = model))
@@ -170,12 +173,6 @@ ggplot(thing) +
   geom_boxplot(aes(x = factor(zipcode), y = resid, color = model))
 ggplot(thing) +
   geom_boxplot(aes(x = factor(condition), y = resid, color = model))
-
-ggplot() +
-  geom_qq(aes(sample = m2_test$residuals), alpha=0.2)
-ggplot() +
-  geom_qq(aes(sample = m3_test$residuals), alpha=0.2)
-
 
 vif(m1)
 vif(m2)
