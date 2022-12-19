@@ -1,10 +1,8 @@
 library(tidyverse)
-library(modelr)
 
-df_raw <- read.table("controllers.dat")
-colnames(df_raw)<-c("experience","age","errors","size")
-df_raw <- tibble(df_raw)
-df <- df_raw %>% mutate(error_rate = errors/size) %>%
+df <- read_table("controllers.dat", col_names = c("experience","age","errors","size"))
+df <- df %>%
+  mutate(error_rate = errors/size) %>%
   mutate(age = factor(age), experience = ordered(experience))
 
 ggplot(df) +
