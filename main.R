@@ -6,12 +6,29 @@ library(stats)
 library(nlstools)
 library(leaps)
 library(tidyverse)
+library(modelr)
 library(GGally)
 library(caret)
 library(olsrr)
 library(plyr)
 library(gridExtra)
 rm(list = ls())
+
+pmse = function(trainmodel, testmodel, ytest) {
+  Xtest = testmodel$x
+  coeffs = as.matrix(as.vector(trainmodel$coefficients))
+  ypred = Xtest%*%coeffs
+  pmse = sum((ytest-ypred)^2)/length(ytest)
+  R2train = summary(trainmodel)$r.squared
+  R2test = 1-sum((ytest-ypred)^2)/sum((ytest-mean(ytest))^2)
+  MAE <- mean(abs(exp(ypred) - exp(ytest)))
+  
+  print(ggplot() +
+          geom_point(aes(x=ypred, y=ytest), alpha=0.1, color="blue") +
+          geom_abline(aes(intercept=0, slope=1), color="red"))
+  
+  c(pmse, R2train, R2test, MAE)
+}
 
 # Modify data?
 df = tibble(read.csv("kc_house_data.csv"))
@@ -91,16 +108,78 @@ m2 <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=
 # Even simpler model
 m3 <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red)
 
+
+# Training/testing
+df_red$id <- 1:nrow(df_red)
+df_red_train <- df_red %>% dplyr::sample_frac(0.5)
+df_red_test  <- dplyr::anti_join(df_red, df_red_train, by = 'id')
+m0_train = lm(price ~ ., data=df_red_train)
+m1_train <- lm(log(price) ~ ., data=df_red_train)
+m2_train <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red_train)
+m3_train <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red_train)
+
+m0_test = lm(price ~ ., data=df_red_test, x=TRUE)
+m1_test <- lm(log(price) ~ ., data=df_red_test, x=TRUE)
+m2_test <- lm(log(price) ~ sqft_basement + grade + sqft_above + zipcode + view, data=df_red_test, x=TRUE)
+m3_test <- lm(log(price) ~ sqft_basement + grade + sqft_above * zipcode + view , data=df_red_test, x=TRUE)
+
+# Model evaluation, R2
+pmse(m0_train, m0_test, df_red_test$price)
+pmse(m1_train, m1_test, log(df_red_test$price))
+pmse(m2_train, m2_test, log(df_red_test$price))
+pmse(m3_train, m3_test, log(df_red_test$price))
+
+# Counting predictions
+m0_predict <- as.tibble(predict(m0_test, interval = "predict", level = 0.95))
+m0_predict <- mutate(m0_predict, width = upr-lwr)
+m1_predict <- as.tibble(predict(m1_test, interval = "predict", level = 0.95))
+m1_predict <- mutate(m1_predict, width = upr-lwr)
+m2_predict <- as.tibble(predict(m2_test, interval = "predict", level = 0.95))
+m3_predict <- as.tibble(predict(m3_test, interval = "predict", level = 0.95))
+sum(df_red_test$price < m0_predict$upr & df_red_test$price > m0_predict$lwr) / dim(df_red_test)[1]
+sum(log(df_red_test$price) < m1_predict$upr & df_red_test$price > m1_predict$lwr) / dim(df_red_test)[1]
+sum(log(df_red_test$price) < m2_predict$upr & df_red_test$price > m2_predict$lwr) / dim(df_red_test)[1]
+sum(log(df_red_test$price) < m3_predict$upr & df_red_test$price > m3_predict$lwr) / dim(df_red_test)[1]
+  
+ggplot(predict(m0_test, interval = "predict")) +
+  geom_line(aes(y = fit))
+
+ggplot(m1_predict) +
+  geom_point(aes(y = width, x = log(df_red_test$price)))
+
 # Check distribution of residuals
 ggplot() +
-  geom_freqpoly(aes(x = m1$residuals))
+  geom_freqpoly(aes(x = m2$residuals))
+p1 <- ggplot() +
+  geom_qq(aes(sample = m0_test$residuals), alpha=0.2)
+thing <- df_red_test %>%
+  gather_residuals(m1_test,m2_test,m3_test)
+p2 <- ggplot(thing) +
+  geom_qq(aes(sample = resid, color = model), alpha = 0.2)
+fig.combined <- grid.arrange(p1,p2, ncol = 2, widths = c(1,1.25))
+# Residuals for different categorical variables
+ggplot(thing) +
+  geom_boxplot(aes(x = factor(grade), y = resid, color = model))
+ggplot(thing) +
+  geom_boxplot(aes(x = factor(bedrooms), y = resid, color = model))
+ggplot(thing) +
+  geom_boxplot(aes(x = factor(floors), y = resid, color = model))
+ggplot(thing) +
+  geom_boxplot(aes(x = factor(round(bathrooms)), y = resid, color = model))
+ggplot(thing) +
+  geom_boxplot(aes(x = factor(zipcode), y = resid, color = model))
+ggplot(thing) +
+  geom_boxplot(aes(x = factor(condition), y = resid, color = model))
+
+ggplot() +
+  geom_qq(aes(sample = m2_test$residuals), alpha=0.2)
+ggplot() +
+  geom_qq(aes(sample = m3_test$residuals), alpha=0.2)
+
 
 vif(m1)
 vif(m2)
 vif(m3)
-ggplot(df) +
-  geom_point(aes(x = long, y = lat, color = price_per_sqft), alpha = 0.05) +
-  scale_colour_gradient(low = "blue", high = "red")
 
 #Outliers?
 #df[4025, ]
